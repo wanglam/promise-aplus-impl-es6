@@ -66,6 +66,19 @@ class Promise {
                             reject(new TypeError("Can't be same!"));
                             return ;
                         }
+                        let then = null
+                        try {
+                            then = result.then;
+                        }catch (e) {
+                            reject(e);
+                            return ;
+                        }
+
+                        if (typeof then !== "function") {
+                            resolve(result)
+                            return ;
+                        }
+
                         let isRunFulfilledOrRejected = false;
                         const onlyOnce = function(func){
                             return function(){
@@ -77,7 +90,7 @@ class Promise {
                         }
 
                         try{
-                            result.then(onlyOnce(function(data){
+                            then.call(result, onlyOnce(function(data){
                                 if (isThenable(data)) {
                                     runFuncResult(data);
                                 } else {
@@ -85,7 +98,7 @@ class Promise {
                                 }
                             }), onlyOnce(function(reason){
                                 reject(reason);
-                            }));
+                            }))
                         } catch (e) {
                             if (!isRunFulfilledOrRejected) {
                                 reject(e)
