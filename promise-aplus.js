@@ -17,6 +17,77 @@ function isThenable(obj){
 	return obj && (typeof obj === "function" || typeof obj === "object") && "then" in obj;
 }
 
+
+function runFulfilledOrRejectedResult(returnedPromise, result, resolve, reject) {
+	if ( isThenable(result) ) {
+		if (result === returnedPromise) {
+			reject(new TypeError("Can't be same!"));
+			return ;
+		}
+		let then = null;
+		try {
+			then = result.then;
+		}catch (e) {
+			reject(e);
+			return ;
+		}
+
+		if (typeof then !== "function") {
+			resolve(result);
+			return ;
+		}
+
+		let isRunFulfilledOrRejected = false;
+		const onlyOnce = function(func){
+			return function(){
+				if (!isRunFulfilledOrRejected) {
+					isRunFulfilledOrRejected = true;
+					func.apply(null, arguments);
+				}
+			};
+		};
+
+		try{
+			then.call(result, onlyOnce(function(data){
+				if (isThenable(data)) {
+					runFulfilledOrRejectedResult(returnedPromise, data, resolve, reject);
+				} else {
+					resolve(data);
+				}
+			}), onlyOnce(function(reason){
+				reject(reason);
+			}));
+		} catch (e) {
+			if (!isRunFulfilledOrRejected) {
+				reject(e);
+				return ;
+			}
+		}
+	} else {
+		if (result instanceof Error) {
+			reject(result);
+		} else {
+			resolve(result);
+		}
+	}
+}
+
+
+function runFulfilledOrRejected(func, payload, notFuncCb, returnedPromise, resolve, reject) {
+	if (typeof func !== "function") {
+		notFuncCb(payload);
+		return;
+	}
+	let result = null;
+	try{
+		result = func(payload);
+	} catch ( e ){
+		reject(e);
+		return ;
+	}
+	runFulfilledOrRejectedResult(returnedPromise, result, resolve, reject);
+}
+
 class Promise {
 	constructor(promiseBody) {
 		this.initProperties();
@@ -44,7 +115,7 @@ class Promise {
 				execCallbacks(this.fulfilledCallbacks, data);
 			}
 		};
-    
+	
 		this.execReject = (reason) => {
 			if (this.status === "pending") {
 				this.status = "rejected";
@@ -60,78 +131,11 @@ class Promise {
 	then(onFulfilled, onRejected){
 		const returnedPromise = new Promise(wrapperTimeoutZero(
 			(resolve, reject) => {
-				const runFuncResult = (result) => {
-					if ( isThenable(result) ) {
-						if (result === returnedPromise) {
-							reject(new TypeError("Can't be same!"));
-							return ;
-						}
-						let then = null;
-						try {
-							then = result.then;
-						}catch (e) {
-							reject(e);
-							return ;
-						}
-
-						if (typeof then !== "function") {
-							resolve(result);
-							return ;
-						}
-
-						let isRunFulfilledOrRejected = false;
-						const onlyOnce = function(func){
-							return function(){
-								if (!isRunFulfilledOrRejected) {
-									isRunFulfilledOrRejected = true;
-									func.apply(null, arguments);
-								}
-							};
-						};
-
-						try{
-							then.call(result, onlyOnce(function(data){
-								if (isThenable(data)) {
-									runFuncResult(data);
-								} else {
-									resolve(data);
-								}
-							}), onlyOnce(function(reason){
-								reject(reason);
-							}));
-						} catch (e) {
-							if (!isRunFulfilledOrRejected) {
-								reject(e);
-								return ;
-							}
-						}
-					} else {
-						if (result instanceof Error) {
-							reject(result);
-						} else {
-							resolve(result);
-						}
-					}
-				};
-				const execResultAndCheckSame = (func, data, notFuncCb) => {
-					if (typeof func !== "function") {
-						notFuncCb(data);
-						return;
-					}
-					let result = null;
-					try{
-						result = func(data);
-					} catch ( e ){
-						reject(e);
-						return ;
-					}
-					runFuncResult(result);
-				};
 				const execOnFulfilled = function(data) {
-					execResultAndCheckSame(onFulfilled, data, resolve);
+					runFulfilledOrRejected(onFulfilled, data, resolve, returnedPromise, resolve, reject);
 				};
 				const execOnRejected = function(reason) {
-					execResultAndCheckSame(onRejected, reason, reject);
+					runFulfilledOrRejected(onRejected, reason, reject, returnedPromise, resolve, reject);
 				};
 				if (this.status === "pending") {
 					this.fulfilledCallbacks.push(execOnFulfilled);
