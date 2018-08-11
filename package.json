@@ -1,0 +1,14 @@
+{
+  "name": "promise-aplus-impl",
+  "version": "1.0.0",
+  "description": "",
+  "main": "promise-aplus.js",
+  "scripts": {
+    "test": "promises-aplus-tests ./adpater.js"
+  },
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "promises-aplus-tests": "^2.1.2"
+  }
+}
